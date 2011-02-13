@@ -1,0 +1,23 @@
+citHeader("To cite dmt in publications use:")
+
+citEntry(entry="misc",
+         title = "Dependency modeling toolkit",
+         author = personList(
+	 	person(first ="Leo et al.", last="Lahti", email = "leo.lahti@iki.fi")),
+	 year = "2010",
+	 address = 
+	 "International Conference on Machine Learning
+(ICML-2010). Workshop on Machine Learning Open Source Software. Haifa, Israel",
+	     url = {dmt.r-forge.r-project.org},
+textVersion =
+         paste("Leo Lahti et al.",
+               "Dependency modeling toolkit",
+	 "International Conference on Machine Learning (ICML-2010)",
+	 "Workshop on Machine Learning Open Source Software", 
+	 "Haifa, Israel, 2010.",
+	 "Project url: dmt.r-forge.r-project.org",
+               sep=" ")
+         )
+
+citFooter("dmt has been created by Leo Lahti, Olli-Pekka Huovilainen and Abhishek Tripathi. Please cite the relevant references.")
+
