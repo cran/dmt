@@ -231,9 +231,9 @@ slotNames(model)
 For detailed explanation of the output, see
 help(fit.dependency.model). 
 
-The tests/ directory of the package contains a comprehensive set of
-examples with toy data.
-
+A comprehensive set of examples with toy data is available at
+http://dmt.r-forge.r-project.org/tests/complete/ (see the README file
+for details)
 
 \subsection{Parameter estimation}
 
@@ -287,9 +287,10 @@ regarding the drCCA functionality.
 \item {\it Licensing terms:} the package is licensed under FreeBSD
 open software license.
 
-\item {\it Citing DMT:} Please cite \cite{Lahti10icml, Lahti10thesis};
-for particular algorithms (drCCA, fit.dependency.model, etc.), see
-also separate citation information in the documentation. 
+\item {\it Citing DMT:} When using the package, please cite
+\cite{Lahti10icml, Lahti10thesis}; for particular algorithms (drCCA,
+fit.dependency.model, etc.), see also additional citation information
+in the documentation. 
 
 \end{itemize}
 
