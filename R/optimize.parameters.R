@@ -33,7 +33,7 @@ optimize.parameters <- function (X, Y, zDim = 1, priors = NULL,
   Nsamples <- inits$Nsamples
 
   # FIXME: handle priors completely outside this function later!
-  
+
   if ( length(priors) == 0 ) { priors <- list() }
 
   ###  Wx ~ Wy prior inits  ###
@@ -88,10 +88,12 @@ optimize.parameters <- function (X, Y, zDim = 1, priors = NULL,
   # FIXME: remove par.change from function input
 
   par.changes <- rep(1e300, convergence.steps)
-  cnt2 <- 0
 
   if ( verbose ) { cat(paste("Starting iterations \n")) }
-  while (any(par.changes > epsilon) || any(par.changes < 0)) {
+
+  # Convergence ends when consecutive cost function changes are below
+  # the threshold and the last step reduces the cost
+  while (any(par.changes > epsilon) || (par.changes[[convergence.steps]] < 0)) {
 
     if ( verbose ) { cat(cost.new); cat("\n") }
 
@@ -138,8 +140,8 @@ optimize.parameters <- function (X, Y, zDim = 1, priors = NULL,
         # FIXME add the intermediates, should be straightforward by combining penalized optimizations
       }
 
-    } else { # Unconstrained W
-        
+    } else if (is.null(priors$W)) { # Unconstrained W
+
       if ( priors$Nm.wxwy.sigma == 0 ) { # Wx = Wy
 
         # assuming Wx = Wy
@@ -147,7 +149,7 @@ optimize.parameters <- function (X, Y, zDim = 1, priors = NULL,
 	# equations modified from there to match Wx = Wy case
 
         W <- W.simcca.EM(W, phi, Dim, Dcov)
-		    		    
+
       } else if ( priors$Nm.wxwy.sigma > 0 && priors$Nm.wxwy.sigma < Inf ) { # Wx ~ Wy constrained
 
         # Update W: initialize with previous W			       
@@ -243,22 +245,23 @@ optimize.parameters <- function (X, Y, zDim = 1, priors = NULL,
         # convert to matrices
 	phi$X <- diag(phi.estimate, Dim$X)
 	phi$Y <- diag(phi.estimate, Dim$Y)
-	phi$total <- diag(c(diag(phi$X), diag(phi$Y)))	
+	phi$total <- diag(phi.estimate, Dim$X + Dim$Y)
 
         # FIXME could be sped up by using scalars here, and similar treatment with W updates than with the "isotropic" option
 	    
      } else if ( marginalCovariances == "diagonal" ) {
-  
+
        phi.inv$total <- rbind(cbind(phi.inv$X, nullmat),
                            cbind(t(nullmat), phi.inv$Y))    
-  
+
        # FIXME: speedups possible when Wx = Wy. Implement.     
        # FIXME: compare M, beta to isotropic/full cases and join common parts
        # FIXME needs to be checked!
-       phi <- phi.diagonal.double(W$total, phi.inv$total, Dcov$total, Dim)
+
+       phi <- phi.diagonal.double(W$total, phi.inv$total, Dcov$total, Dim) 
        #phi$X <- phi.diagonal.single(W$total, phi.inv$total, Dcov$X, Dim)       
        #phi$Y <- phi.diagonal.single(W$total, phi.inv$total, Dcov$Y, Dim)            
-     
+
      } else {
        stop("Unknown marginalCovariances parameter!")
      }
@@ -292,9 +295,10 @@ optimize.parameters <- function (X, Y, zDim = 1, priors = NULL,
         stop("Provide proper (nonneg. real) value for priors$Nm.wxwy.sigma")
       }
     }
-    
-    cnt2 <- cnt2 + 1; if (cnt2 > convergence.steps) {cnt2 <- 1} 
-    par.changes[[cnt2]] <- (cost.old - cost.new)
+
+    # remove the first element, add the new cost change into end
+    # this way we keep track of the last congergence.steps iterations
+    par.changes <- c(par.changes, (cost.old - cost.new))[-1]
 
   }
 

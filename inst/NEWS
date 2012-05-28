@@ -1,5 +1,47 @@
-CHANGES IN VERSION 0.7.05 (2011-02-25)
+CHANGES IN VERSION 0.8.09 (2012-05-25)
 
+  o added treatment of one-dimensional data in pfa
+
+CHANGES IN VERSION 0.8.08 (2012-05-24)
+
+BUG FIXES
+
+  o changed argument log -> logarithm in determinant function
+
+CHANGES IN VERSION 0.8.07 (2011-10-14)
+
+  o removed compiler and methods from dependencies
+  o packageStartupMessage in firstlib.R
+
+
+CHANGES IN VERSION 0.8.06 (2011-07-27)
+
+  o added compiler package to dependencies
+  o option for exponential prior on W added in pfa
+
+CHANGES IN VERSION 0.8.05 (2011-07-15)
+
+  o optimize.parameters.R sometimes got stuck due to very mild
+  convergence criterion bug. Now corrected.
+
+CHANGES IN VERSION 0.8.04 (2011-07-11)
+
+  o added pfa.log.likelihood
+
+CHANGES IN VERSION 0.8.03 (2011-04-13)
+
+  o plotVar fixed (screen removed)
+
+CHANGES IN VERSION 0.8.01 (2011-03-28)
+
+  o bug with matched = TRUE, Nm.Wx.Wy.sigma = 0, with diagonal
+    covariances and identical isotropic covariances; in W.simcca.EM
+    function the W$total name was missing, causing failure. Corrected.
+
+CHANGES IN VERSION 0.7.07 (2011-02-25)
+
+  o package was accepted to CRAN and passed all tests; added links to
+    vignette and website
   o tests/ directory removed, too time-consuming.
 
 CHANGES IN VERSION 0.7.04 (2011-02-21)

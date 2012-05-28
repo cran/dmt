@@ -134,15 +134,15 @@ fit.dependency.model <- function (X, Y,
     }
       
     # Matrix normal distribution mean matrix not specified
-    if ( is.null(priors$Nm.wxwy.mean) ) {
-      message("The matrix Nm.wxwy.mean is not specified. Using identify matrix.")
+    if ( is.null(priors$Nm.wxwy.mean) || is.na(priors$Nm.wxwy.mean)) {
+      message("The matrix Nm.wxwy.mean is not specified. Using identity matrix.")
       priors$Nm.wxwy.mean <- 1
     }    
 
     method <- "pSimCCA"
         
     # Case IIa: fully constrained case Wx = Wy
-    if (priors$Nm.wxwy.sigma == 0) { #Wx = Wy        
+    if ( priors$Nm.wxwy.sigma == 0 ) { #Wx = Wy        
         
       if ( verbose ) { cat("Assuming Wx = Wy\n") }
 	
@@ -169,7 +169,7 @@ fit.dependency.model <- function (X, Y,
 
       } else if (is.null(priors$W)) {
         
-	if ( verbose ) {cat("Wx = Wy; free W.\n")}
+	if ( verbose ) { cat("Wx = Wy; free W.\n") }
 
           # mlsp'09 simcca
           # message("Case Wx = Wy. No regularization for W.")
@@ -177,7 +177,8 @@ fit.dependency.model <- function (X, Y,
 	  # use this for full W (EM algorithm, unstable for n ~ p)
          res <- optimize.parameters(X, Y, zDim = zDimension, priors = priors, 
                                    marginalCovariances = marginalCovariances,           
-                                   epsilon = epsilon, convergence.steps = 3, verbose = verbose)
+                                   epsilon = epsilon, convergence.steps = 3,
+                                   verbose = verbose)
 
 
           method <- "matched case Wx = Wy with unconstrained W. Check covariances from parameters."
@@ -431,7 +432,10 @@ ppca.calculate <- function (X, zDimension) {
   list(W = W, phi = phi)
 }
 
-pfa <- function (X, Y = NULL, zDimension = NULL, includeData = TRUE, calculateZ = TRUE) {
+pfa <- function (X, Y = NULL,
+                 zDimension = NULL,
+                 includeData = TRUE,
+                 calculateZ = TRUE, priors = NULL) {
 
   # Probabilistic factorial analysis model as proposed in
   # EM Algorithms for ML Factoral Analysis, Rubin D. and 
@@ -443,41 +447,64 @@ pfa <- function (X, Y = NULL, zDimension = NULL, includeData = TRUE, calculateZ 
   X <- dat$X
   Y <- dat$Y
   zDimension <- dat$zDimension
-
-  res <- calc.pfa(X, Y, zDimension)
-
   method <- "pFA"
   params <- list(marginalCovariances = "diagonal", zDimension = zDimension)
-  score <- dependency.score( res )  
-  model <- new("DependencyModel", W = res$W, phi = res$phi, score = score, method = method, params = params)
+
+  if (nrow(X) == 1 && (nrow(Y) == 1 || is.null(Y)) ) {
+
+    score <- Inf
+    res <- list(W = dat, phi = list(X = 0, Y = 0))
+    if (is.null(Y)) {res$phi$Y <- res$phi$X <- NULL; res$phi$total <- 0}    
+
+  } else {
+
+    res <- calc.pfa(X, Y, zDimension, priors)
+    score <- dependency.score( res )  
+
+  }
+
+  model <- new("DependencyModel",
+               W = res$W, phi = res$phi,
+               score = score,
+               method = method,
+               params = params)
   if ( includeData ) model@data <- list(X = X, Y = Y)
-  if ( calculateZ )  model@z <- z.expectation(model, X, Y)
+
+  if ( calculateZ ) {
+    if (nrow(X) == 1 && (nrow(Y) == 1 || is.null(Y)) ) {
+      model@z <- X
+    } else {
+      model@z <- z.expectation(model, X, Y)
+    }
+  }
+
   model
 
 }
 
-calc.pfa <- function (X, Y, zDimension) {
+calc.pfa <- function (X, Y, zDimension, priors = NULL) {
 
   # Y.rubin is Y in (Rubin & Thayer, 1982)
   # Variables on columns and samples on rows
+  # W corresponds to t(beta)
   if (is.null(Y)){
     Y.rubin <- t(X)
     # Factor loading matrix
-    beta <- t(eigen(cov(t(X)))$vectors[, 1:zDimension])
+    Wt <- t(eigen(cov(t(X)))$vectors[, 1:zDimension])
   } else {
     Y.rubin <- cbind(t(X), t(Y))
-    # Use different initialization for beta when data has inequal dimensionalities
+    # Use different initialization for Wt when data has inequal dimensionalities
     if (nrow(X) != nrow(Y)) {
-      beta <- t(eigen(cov(Y.rubin))$vectors[,1:zDimension])
+      Wt <- t(eigen(cov(Y.rubin))$vectors[,1:zDimension])
     } else {
       init <- initialize2(X, Y, zDimension, marginalCovariances = "diagonal")
       # Factor loading matrix
-      beta <- t(init$W$total[,1:zDimension])
+      Wt <- t(init$W$total[,1:zDimension])
     }
   }
   
   epsilon <- 1e-3
-  colnames(beta) <- colnames(Y.rubin)
+  colnames(Wt) <- colnames(Y.rubin)
   tau2 <- diag(ncol(Y.rubin))
 
   Cyy <- cov(Y.rubin)
@@ -485,28 +512,43 @@ calc.pfa <- function (X, Y, zDimension) {
   # EM
   while(delta > epsilon){
 
-    beta.old <- beta
+    Wt.old <- Wt
     tau2.old <- tau2
 
-    # E step
+    # E-step
     invtau2 <- solve(tau2)
-    tbb <- invtau2 - (invtau2%*%t(beta))%*%solve(diag(zDimension) + beta%*%invtau2%*%t(beta))%*%(beta%*%invtau2)
+    binv <- Wt%*%invtau2
+    tbb <- invtau2 - (invtau2%*%t(Wt))%*%solve(diag(zDimension) + binv%*%t(Wt))%*%(binv)
+    d <- tbb%*%t(Wt)
+    D <- diag(zDimension) - Wt%*%d
+    cyd   <- Cyy%*%d
+    
+    # M-step
+    # Update W
+    # FIXME: combine calc.pca, calc.pfa and calc.cca into one uniform model?
+    if (is.null(priors)) {
+      #message("Analytical optimization")      
+      Wt  <- solve(t(d)%*%cyd + D)%*%t(cyd) # WORKS    
+      # Also obtained with numerical optimization:
+      # Wt <- update.W.singledata(Wt, X, tau2)
+    } else if (!is.null(priors$W) && priors$W > 0) {
+      #message("Numerical optimization")
+      Wt <- update.W.singledata(Wt, X, tau2, priors)
+    }
+    
+    # Update margin/s 
+    tau2  <- diag(diag(Cyy - cyd%*%solve(t(d)%*%cyd + D)%*%t(cyd)))
+    # Check cost function convergence
+    delta <- max(sum(abs(tau2 - tau2.old)), sum(abs(Wt - Wt.old)))
 
-    d <- tbb%*%t(beta)
-    D <- diag(zDimension) - beta%*%d
-	
-    # M step
-    beta <- solve(t(d)%*%Cyy%*%d+D)%*%t(Cyy%*%d)
-    tau2 <- diag(diag(Cyy - Cyy%*%d%*%solve(t(d)%*%Cyy%*%d + D)%*%t(Cyy%*%d)))
-    delta <- max(sum(abs(tau2-tau2.old)),sum(abs(beta-beta.old)))
   }
 
   # Convert names as same in other methods
   if ( is.null(Y) ){
-      W <- list(total = t(beta))
+      W <- list(total = t(Wt))
     phi <- list(total = tau2)
   } else {
-      W <- list(X = as.matrix(t(beta)[(1:nrow(X)),]), Y = as.matrix(t(beta)[-(1:nrow(X)),]), total = t(beta))
+      W <- list(X = as.matrix(t(Wt)[(1:nrow(X)),]), Y = as.matrix(t(Wt)[-(1:nrow(X)),]), total = t(Wt))
     phi <- list(X = tau2[1:nrow(X),1:nrow(X)], Y = tau2[-(1:nrow(X)),-(1:nrow(X))], total = tau2)                
   }
   
@@ -515,64 +557,9 @@ calc.pfa <- function (X, Y, zDimension) {
 }
 
 
-phi.diagonal.single <- function (W, phi.inv, Cxx, Dim) {
-
-  # FIXME
-  # Experimental. Compare this + separate W update iterations to pFA
-  # and to phi.diagonal.double
-
-  #phi.diagonal.single(W$total, phi.inv, Dcov$X, Dim) {
-
-  # diagonal phi update for phi$X (or phi$Y) only
-
-  # Y.rubin is Y in (Rubin & Thayer, 1982)
-  # Variables on columns and samples on rows
-
-  # Cxx <- cov(t(X))  
-  # W <- W$total
-
-  phi.inv.W <- phi.inv%*%W
-  tbb <- phi.inv - (phi.inv.W)%*%solve(diag(Dim$Z) + t(W)%*%phi.inv.W)%*%t(phi.inv.W)
-  d <- tbb%*%W
-  D <- diag(Dim$Z) - t(W)%*%d
-  Cxxd <- Cxx%*%d
-
-  diag(diag(Cxx - Cxxd%*%solve(t(d)%*%Cxxd + D)%*%t(Cxxd)))
-  
-}
 
 
-phi.diagonal.double <- function (W, phi.inv, Cxx, Dim) {
-
-  #phi.diagonal.double(W$total, phi.inv‰total, Dcov$total, Dim) {
-
-  # phi.diagonal.single with Cxx = Dcov$total
-  # should give the same result for phi$total. Check.
-
-  # solving both phix and phiy at once
-
-  # Y.rubin is Y in (Rubin & Thayer, 1982)
-  # Variables on columns and samples on rows
-
-  #Y.rubin <- cbind(t(X), t(Y))
-  #Cxx <- Dcov$total
-
-  phi.inv.W <- phi.inv%*%W
-  tbb <- phi.inv - (phi.inv.W)%*%solve(diag(Dim$Z) + t(W)%*%phi.inv.W)%*%t(phi.inv.W)
-  d <- tbb%*%W
-  D <- diag(Dim$Z) - t(W)%*%d
-  Cxxd <- Cxx%*%d
-
-  phi <- list()
-  phi$total <- diag(diag(Cxx - Cxxd %*% solve(t(d) %*% Cxxd + D) %*% t(Cxxd)))
-  phi <- list(X = phi$total[1:Dim$X,1:Dim$X], Y = phi$total[-(1:Dim$X),-(1:Dim$X)], total = phi$total)                
-  
-  phi
-
-}
-
-
-pcca.with.isotropic.margins <- function (X, Y, zDimension = 1, epsilon = 1e-6, delta = 1e6) {
+Pcca.with.isotropic.margins <- function (X, Y, zDimension = 1, epsilon = 1e-6, delta = 1e6) {
 
   # epsilon and delta are convergence parameters
   # zDimension determines the dimensionality of the shared latent variable Z
