@@ -5,6 +5,7 @@ export(
 # fixed.window2,
 centerData,
 compare.estimate.and.truth,
+dependency.score,
 fit.dependency.model,
 generate.toydata,
 ppca,
@@ -53,3 +54,6 @@ getZ
 
 importFrom(graphics, plot)
 importFrom(Matrix, nearPD)
+import(methods)
+import(MASS)
+import(mvtnorm)
